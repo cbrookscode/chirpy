@@ -7,11 +7,13 @@ import (
 )
 
 func main() {
+	const filepathroot = "."
 	const port = "8080"
 
-	ServeMux := http.NewServeMux()
-	Server := http.Server{
-		Handler: ServeMux,
+	srvmux := http.NewServeMux()
+	srvmux.Handle("/", http.FileServer(http.Dir(filepathroot)))
+	srv := http.Server{
+		Handler: srvmux,
 		Addr:    ":" + port,
 	}
 
@@ -26,5 +28,5 @@ func main() {
 	log.SetOutput(logfile)
 
 	log.Printf("serving on port %v\n", port)
-	log.Fatal(Server.ListenAndServe())
+	log.Fatal(srv.ListenAndServe())
 }
