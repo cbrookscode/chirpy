@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,17 +21,23 @@ func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 }
 
 func (a *apiConfig) handlerMetrics(reswrit http.ResponseWriter, req *http.Request) {
-	reswrit.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	reswrit.Header().Add("Content-Type", "text/html; charset=utf-8")
 	reswrit.WriteHeader(http.StatusOK)
-	new := fmt.Sprintf("Hits: %v\n", a.fileserverHits.Load())
+	new := fmt.Sprintf(
+		`<html>
+			<body>
+				<h1>Welcome, Chirpy Admin</h1>
+				<p>Chirpy has been visited %d times!</p>
+			</body>
+		</html>`, a.fileserverHits.Load())
 	reswrit.Write([]byte(new))
 }
 
 func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request) {
 	reswrit.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	reswrit.WriteHeader(http.StatusOK)
-	a.fileserverHits.Swap(0)
-	new := fmt.Sprintf("Coutner has been reset: %v\n", a.fileserverHits.Load())
+	a.fileserverHits.Store(0)
+	new := fmt.Sprintf("Counter has been reset: %v\n", a.fileserverHits.Load())
 	reswrit.Write([]byte(new))
 }
 
@@ -42,9 +49,10 @@ func main() {
 
 	srvmux := http.NewServeMux()
 	srvmux.Handle("/app/", api.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathroot)))))
-	srvmux.HandleFunc("/healthz", handlerReadiness)
-	srvmux.HandleFunc("/metrics", api.handlerMetrics)
-	srvmux.HandleFunc("/reset", api.handlerReset)
+	srvmux.HandleFunc("GET /api/healthz", handlerReadiness)
+	srvmux.HandleFunc("GET /admin/metrics", api.handlerMetrics)
+	srvmux.HandleFunc("POST /admin/reset", api.handlerReset)
+	srvmux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 
 	srv := http.Server{
 		Handler: srvmux,
@@ -65,8 +73,65 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-func handlerReadiness(reswrit http.ResponseWriter, req *http.Request) {
-	reswrit.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	reswrit.WriteHeader(http.StatusOK)
-	reswrit.Write([]byte("OK"))
+func respondWithError(w http.ResponseWriter, msg string, code int, err error) {
+	if err != nil {
+		log.Println(err)
+	}
+	if code > 499 {
+		log.Printf("Responding with 5XX error: %v\n", msg)
+	}
+
+	type errorResp struct {
+		Error string `json:"error"`
+	}
+	payload := errorResp{Error: msg}
+
+	respondWithJson(w, code, payload)
+}
+
+func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshalling json: %v\n", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.WriteHeader(code)
+	w.Write(bytes)
+}
+
+func handlerReadiness(resWriter http.ResponseWriter, req *http.Request) {
+	resWriter.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	resWriter.WriteHeader(http.StatusOK)
+	resWriter.Write([]byte("OK"))
+}
+
+func handlerValidateChirp(resWriter http.ResponseWriter, req *http.Request) {
+	type incoming struct {
+		Body string `json:"body"`
+	}
+
+	type success struct {
+		Valid bool `json:"valid"`
+	}
+
+	chirp := incoming{}
+	decoder := json.NewDecoder(req.Body)
+	err := decoder.Decode(&chirp)
+	if err != nil {
+		log.Printf("Error decoding json data in POST request: %v\n", err)
+		respondWithError(resWriter, "Something went wrong", 500, err)
+		return
+	}
+
+	if len(chirp.Body) <= 140 {
+		// is valid
+		payload := success{Valid: true}
+		respondWithJson(resWriter, 200, payload)
+	} else {
+		// is not valid
+		respondWithError(resWriter, "Chrip is too long", 400, nil)
+	}
 }
