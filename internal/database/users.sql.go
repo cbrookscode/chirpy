@@ -32,3 +32,12 @@ func (q *Queries) CreateUser(ctx context.Context, email sql.NullString) (User, e
 	)
 	return i, err
 }
+
+const deleteUsers = `-- name: DeleteUsers :exec
+DELETE FROM users
+`
+
+func (q *Queries) DeleteUsers(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteUsers)
+	return err
+}

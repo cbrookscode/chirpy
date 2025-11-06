@@ -9,8 +9,10 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cbrookscode/chirpy/internal/database"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -18,6 +20,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	queries        *database.Queries
+	platform       string
 }
 
 func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -40,15 +43,68 @@ func (a *apiConfig) handlerMetrics(reswrit http.ResponseWriter, req *http.Reques
 	reswrit.Write([]byte(new))
 }
 
+func (a *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http.Request) {
+	type incoming struct {
+		Email string `json:"email"`
+	}
+
+	type User struct {
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Email     string    `json:"email"`
+	}
+
+	userinfo := incoming{}
+	decoder := json.NewDecoder(req.Body)
+	err := decoder.Decode(&userinfo)
+	if err != nil {
+		log.Printf("Error decoding json data in POST request: %v\n", err)
+		respondWithError(resWriter, "Something went wrong", http.StatusInternalServerError, err)
+		return
+	}
+	if userinfo.Email == "" {
+		respondWithError(resWriter, "Provided an empty string for username", 400, nil)
+		return
+	}
+	dbUser, err := a.queries.CreateUser(req.Context(), sql.NullString{String: userinfo.Email, Valid: true})
+	if err != nil {
+		respondWithError(resWriter, "Couldn't create user", http.StatusInternalServerError, err)
+		return
+	}
+
+	// to control json tags map dbuser to User struct
+	updatedUser := User{
+		ID:        dbUser.ID,
+		CreatedAt: dbUser.CreatedAt.Time,
+		UpdatedAt: dbUser.UpdatedAt.Time,
+		Email:     dbUser.Email.String,
+	}
+	respondWithJson(resWriter, http.StatusCreated, updatedUser)
+}
+
 func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request) {
 	reswrit.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	reswrit.WriteHeader(http.StatusOK)
+	if a.platform != "dev" {
+		respondWithError(reswrit, "Reset is only allowed in dev environment", http.StatusForbidden, nil)
+		return
+	}
+	err := a.queries.DeleteUsers(req.Context())
+	if err != nil {
+		respondWithError(reswrit, "Something went wrong", 500, err)
+		return
+	}
+
 	a.fileserverHits.Store(0)
-	new := fmt.Sprintf("Counter has been reset: %v\n", a.fileserverHits.Load())
+	new := fmt.Sprintf("Users have been deleted, and counter has been reset: %v\n", a.fileserverHits.Load())
+	reswrit.WriteHeader(http.StatusOK)
 	reswrit.Write([]byte(new))
 }
 
 func main() {
+	const filepathroot = "."
+	const port = "8080"
+
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
@@ -58,10 +114,8 @@ func main() {
 	}
 	dbQueries := database.New(db)
 
-	const filepathroot = "."
-	const port = "8080"
-
-	api := &apiConfig{queries: dbQueries}
+	myplatform := os.Getenv("PLATFORM")
+	api := &apiConfig{queries: dbQueries, platform: myplatform}
 
 	srvmux := http.NewServeMux()
 	srvmux.Handle("/app/", api.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathroot)))))
@@ -69,6 +123,7 @@ func main() {
 	srvmux.HandleFunc("GET /admin/metrics", api.handlerMetrics)
 	srvmux.HandleFunc("POST /admin/reset", api.handlerReset)
 	srvmux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
+	srvmux.HandleFunc("POST /api/users", api.handlerCreateUser)
 
 	srv := http.Server{
 		Handler: srvmux,
