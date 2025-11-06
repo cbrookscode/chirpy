@@ -44,3 +44,11 @@
 2025/11/06 12:08:02 serving on port 8080
 2025/11/06 13:18:33 serving on port 8080
 2025/11/06 13:19:05 serving on port 8080
+2025/11/06 14:55:31 serving on port 8080
+2025/11/06 14:57:21 serving on port 8080
+2025/11/06 15:00:45 serving on port 8080
+2025/11/06 15:03:07 serving on port 8080
+2025/11/06 15:04:55 Error decoding json data in POST request: EOF
+2025/11/06 15:04:55 EOF
+2025/11/06 15:04:55 Responding with 5XX error: Something went wrong
+2025/11/06 15:13:00 serving on port 8080

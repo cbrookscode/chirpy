@@ -19,6 +19,14 @@ type apiConfig struct {
 	platform       string
 }
 
+type Chirp struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
 func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a.fileserverHits.Add(1)
@@ -79,6 +87,28 @@ func (a *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http.R
 	respondWithJson(resWriter, http.StatusCreated, updatedUser)
 }
 
+func (a *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.Request) {
+	listOfChirps := []Chirp{}
+
+	chirps, err := a.db.GetChirpsAscByCreated(req.Context())
+	if err != nil {
+		respondWithError(resWriter, "Couldn't grab users in ascending order from database", http.StatusInternalServerError, err)
+		return
+	}
+
+	for _, chirp := range chirps {
+		listOfChirps = append(listOfChirps, Chirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt.Time,
+			UpdatedAt: chirp.UpdatedAt.Time,
+			Body:      chirp.Body.String,
+			UserID:    chirp.UserID.UUID,
+		})
+	}
+
+	respondWithJson(resWriter, http.StatusOK, listOfChirps)
+}
+
 func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request) {
 	reswrit.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	if a.platform != "dev" {
@@ -87,12 +117,18 @@ func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request)
 	}
 	err := a.db.DeleteUsers(req.Context())
 	if err != nil {
-		respondWithError(reswrit, "Something went wrong", 500, err)
+		respondWithError(reswrit, "Failed to delete user records", 500, err)
+		return
+	}
+
+	err = a.db.DeleteChirps(req.Context())
+	if err != nil {
+		respondWithError(reswrit, "Failed to delete chirps records", http.StatusInternalServerError, err)
 		return
 	}
 
 	a.fileserverHits.Store(0)
-	new := fmt.Sprintf("Users have been deleted, and counter has been reset: %v\n", a.fileserverHits.Load())
+	new := fmt.Sprintf("Users and chirps have been deleted, and counter has been reset: %v\n", a.fileserverHits.Load())
 	reswrit.WriteHeader(http.StatusOK)
 	reswrit.Write([]byte(new))
 }
@@ -107,14 +143,6 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 	type incoming struct {
 		Body   string `json:"body"`
 		UserID string `json:"user_id"`
-	}
-
-	type returnVals struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Body      string    `json:"body"`
-		UserID    uuid.UUID `json:"user_id"`
 	}
 
 	resWriter.Header().Add("Content-Type", "text/plain; charset=utf-8")
@@ -148,7 +176,7 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 			return
 		}
 
-		payload := returnVals{ // adjust returned struct to customize json tags
+		payload := Chirp{ // adjust returned struct to customize json tags
 			ID:        dbChirp.ID,
 			CreatedAt: dbChirp.CreatedAt.Time,
 			UpdatedAt: dbChirp.UpdatedAt.Time,
