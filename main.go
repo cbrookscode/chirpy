@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 )
 
@@ -102,6 +103,19 @@ func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
 	w.Write(bytes)
 }
 
+func filterProfanity(text string) string {
+	filteredWords := []string{}
+	for _, word := range strings.Fields(text) {
+		switch strings.ToLower(word) {
+		case "kerfuffle", "sharbert", "fornax":
+			filteredWords = append(filteredWords, "****")
+		default:
+			filteredWords = append(filteredWords, word)
+		}
+	}
+	return strings.Join(filteredWords, " ")
+}
+
 func handlerReadiness(resWriter http.ResponseWriter, req *http.Request) {
 	resWriter.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	resWriter.WriteHeader(http.StatusOK)
@@ -113,8 +127,8 @@ func handlerValidateChirp(resWriter http.ResponseWriter, req *http.Request) {
 		Body string `json:"body"`
 	}
 
-	type success struct {
-		Valid bool `json:"valid"`
+	type returnVals struct {
+		CleanedBody string `json:"cleaned_body"`
 	}
 
 	chirp := incoming{}
@@ -126,9 +140,11 @@ func handlerValidateChirp(resWriter http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if len(chirp.Body) <= 140 {
+	filteredChirp := filterProfanity(chirp.Body)
+
+	if len(filteredChirp) <= 140 {
 		// is valid
-		payload := success{Valid: true}
+		payload := returnVals{CleanedBody: filteredChirp}
 		respondWithJson(resWriter, 200, payload)
 	} else {
 		// is not valid
