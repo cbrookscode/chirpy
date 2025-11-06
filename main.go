@@ -104,16 +104,19 @@ func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
 }
 
 func filterProfanity(text string) string {
-	filteredWords := []string{}
-	for _, word := range strings.Fields(text) {
-		switch strings.ToLower(word) {
-		case "kerfuffle", "sharbert", "fornax":
-			filteredWords = append(filteredWords, "****")
-		default:
-			filteredWords = append(filteredWords, word)
+	badWords := map[string]struct{}{
+		"kerfuffle": {},
+		"sharbert":  {},
+		"fornax":    {},
+	}
+
+	words := strings.Fields(text)
+	for i, word := range words {
+		if _, ok := badWords[strings.ToLower(word)]; ok {
+			words[i] = "****"
 		}
 	}
-	return strings.Join(filteredWords, " ")
+	return strings.Join(words, " ")
 }
 
 func handlerReadiness(resWriter http.ResponseWriter, req *http.Request) {
