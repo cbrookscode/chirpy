@@ -32,7 +32,7 @@ func main() {
 	srvmux.HandleFunc("GET /api/healthz", handlerReadiness)
 	srvmux.HandleFunc("GET /admin/metrics", cfg.handlerMetrics)
 	srvmux.HandleFunc("POST /admin/reset", cfg.handlerReset)
-	srvmux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
+	srvmux.HandleFunc("POST /api/chirps", cfg.handlerChirps)
 	srvmux.HandleFunc("POST /api/users", cfg.handlerCreateUser)
 
 	srv := http.Server{

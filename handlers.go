@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -98,65 +97,27 @@ func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request)
 	reswrit.Write([]byte(new))
 }
 
-func respondWithError(w http.ResponseWriter, msg string, code int, err error) {
-	if err != nil {
-		log.Println(err)
-	}
-	if code > 499 {
-		log.Printf("Responding with 5XX error: %v\n", msg)
-	}
-
-	type errorResp struct {
-		Error string `json:"error"`
-	}
-	payload := errorResp{Error: msg}
-
-	respondWithJson(w, code, payload)
-}
-
-func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-
-	bytes, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("Error marshalling json: %v\n", err)
-		w.WriteHeader(500)
-		return
-	}
-	w.WriteHeader(code)
-	w.Write(bytes)
-}
-
-func filterProfanity(text string) string {
-	badWords := map[string]struct{}{
-		"kerfuffle": {},
-		"sharbert":  {},
-		"fornax":    {},
-	}
-
-	words := strings.Fields(text)
-	for i, word := range words {
-		if _, ok := badWords[strings.ToLower(word)]; ok {
-			words[i] = "****"
-		}
-	}
-	return strings.Join(words, " ")
-}
-
 func handlerReadiness(resWriter http.ResponseWriter, req *http.Request) {
 	resWriter.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	resWriter.WriteHeader(http.StatusOK)
 	resWriter.Write([]byte("OK"))
 }
 
-func handlerValidateChirp(resWriter http.ResponseWriter, req *http.Request) {
+func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Request) {
 	type incoming struct {
-		Body string `json:"body"`
+		Body   string `json:"body"`
+		UserID string `json:"user_id"`
 	}
 
 	type returnVals struct {
-		CleanedBody string `json:"cleaned_body"`
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Body      string    `json:"body"`
+		UserID    uuid.UUID `json:"user_id"`
 	}
+
+	resWriter.Header().Add("Content-Type", "text/plain; charset=utf-8")
 
 	chirp := incoming{}
 	decoder := json.NewDecoder(req.Body)
@@ -167,14 +128,35 @@ func handlerValidateChirp(resWriter http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Filter profanity and make sure chirp is less than or equal to 140 characters
 	filteredChirp := filterProfanity(chirp.Body)
+	if len(filteredChirp) <= 140 { // valid
+		convertedID, err := uuid.Parse(chirp.UserID)
+		if err != nil {
+			respondWithError(resWriter, "user id provided is not a valid UUID", http.StatusBadRequest, nil)
+			return
+		}
 
-	if len(filteredChirp) <= 140 {
-		// is valid
-		payload := returnVals{CleanedBody: filteredChirp}
-		respondWithJson(resWriter, 200, payload)
-	} else {
-		// is not valid
+		dbChirp, err := cfg.db.CreateChirp(req.Context(), database.CreateChirpParams{ // store chirp in db
+			Body: sql.NullString{
+				String: filteredChirp,
+				Valid:  true},
+			UserID: uuid.NullUUID{UUID: convertedID, Valid: true},
+		})
+		if err != nil {
+			respondWithError(resWriter, "Error storing chrip in database", http.StatusInternalServerError, err)
+			return
+		}
+
+		payload := returnVals{ // adjust returned struct to customize json tags
+			ID:        dbChirp.ID,
+			CreatedAt: dbChirp.CreatedAt.Time,
+			UpdatedAt: dbChirp.UpdatedAt.Time,
+			Body:      dbChirp.Body.String,
+			UserID:    dbChirp.UserID.UUID,
+		}
+		respondWithJson(resWriter, http.StatusCreated, payload)
+	} else { // is not valid
 		respondWithError(resWriter, "Chrip is too long", 400, nil)
 	}
 }
