@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,10 +9,15 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+
+	"github.com/cbrookscode/chirpy/internal/database"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	queries        *database.Queries
 }
 
 func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -43,10 +49,19 @@ func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request)
 }
 
 func main() {
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Printf("error opening db: %v", err)
+		return
+	}
+	dbQueries := database.New(db)
+
 	const filepathroot = "."
 	const port = "8080"
 
-	api := &apiConfig{}
+	api := &apiConfig{queries: dbQueries}
 
 	srvmux := http.NewServeMux()
 	srvmux.Handle("/app/", api.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathroot)))))
