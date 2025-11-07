@@ -88,6 +88,7 @@ func (a *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http.R
 }
 
 func (a *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.Request) {
+	resWriter.Header().Add("Content-Type", "text/html; charset=utf-8")
 	listOfChirps := []Chirp{}
 
 	chirps, err := a.db.GetChirpsAscByCreated(req.Context())
@@ -107,6 +108,32 @@ func (a *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.Re
 	}
 
 	respondWithJson(resWriter, http.StatusOK, listOfChirps)
+}
+
+func (a *apiConfig) handlerGetSingleChirp(resWriter http.ResponseWriter, req *http.Request) {
+	resWriter.Header().Add("Content-Type", "text/html; charset=utf-8")
+
+	stringid := req.PathValue("chirpID")
+	convertedID, err := uuid.Parse(stringid)
+	if err != nil {
+		respondWithError(resWriter, "user id provided is not a valid UUID", http.StatusBadRequest, nil)
+		return
+	}
+	dbChirp, err := a.db.GetSingleChirp(req.Context(), convertedID)
+	if err != nil {
+		respondWithError(resWriter, "Chirp not found", http.StatusNotFound, err)
+		return
+	}
+
+	finalChirp := Chirp{
+		ID:        dbChirp.ID,
+		CreatedAt: dbChirp.CreatedAt.Time,
+		UpdatedAt: dbChirp.UpdatedAt.Time,
+		Body:      dbChirp.Body.String,
+		UserID:    dbChirp.UserID.UUID,
+	}
+
+	respondWithJson(resWriter, http.StatusOK, finalChirp)
 }
 
 func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request) {

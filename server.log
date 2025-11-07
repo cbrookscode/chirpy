@@ -52,3 +52,6 @@
 2025/11/06 15:04:55 EOF
 2025/11/06 15:04:55 Responding with 5XX error: Something went wrong
 2025/11/06 15:13:00 serving on port 8080
+2025/11/07 09:45:44 serving on port 8080
+2025/11/07 09:45:53 sql: no rows in result set
+2025/11/07 09:46:31 sql: no rows in result set
