@@ -8,6 +8,7 @@ import (
 )
 
 func respondWithError(w http.ResponseWriter, msg string, code int, err error) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err != nil {
 		log.Println(err)
 	}

@@ -6,6 +6,5 @@ CREATE TABLE users(
     email TEXT
 );
 
-
 -- +goose Down
 DROP TABLE users;

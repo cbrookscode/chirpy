@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cbrookscode/chirpy/internal/auth"
 	"github.com/cbrookscode/chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -25,6 +26,13 @@ type Chirp struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	Body      string    `json:"body"`
 	UserID    uuid.UUID `json:"user_id"`
+}
+
+type User struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email     string    `json:"email"`
 }
 
 func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -49,14 +57,8 @@ func (a *apiConfig) handlerMetrics(reswrit http.ResponseWriter, req *http.Reques
 
 func (a *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http.Request) {
 	type incoming struct {
-		Email string `json:"email"`
-	}
-
-	type User struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Email     string    `json:"email"`
+		Password string `json:"password"`
+		Email    string `json:"email"`
 	}
 
 	userinfo := incoming{}
@@ -67,28 +69,38 @@ func (a *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http.R
 		respondWithError(resWriter, "Something went wrong", http.StatusInternalServerError, err)
 		return
 	}
-	if userinfo.Email == "" {
-		respondWithError(resWriter, "Provided an empty string for username", 400, nil)
+	if userinfo.Email == "" || userinfo.Password == "" {
+		respondWithError(resWriter, "Provided an empty string for username or password", 400, nil)
 		return
 	}
-	dbUser, err := a.db.CreateUser(req.Context(), sql.NullString{String: userinfo.Email, Valid: true})
+
+	hash, err := auth.HashPassword(userinfo.Password)
+	if err != nil {
+		respondWithError(resWriter, "Failed to hash password", http.StatusInternalServerError, err)
+		return
+	}
+	dbUser, err := a.db.CreateUser(req.Context(), database.CreateUserParams{
+		Email: sql.NullString{
+			String: userinfo.Email, Valid: true,
+		},
+		HashedPassword: sql.NullString{
+			String: hash, Valid: true,
+		},
+	})
 	if err != nil {
 		respondWithError(resWriter, "Couldn't create user", http.StatusInternalServerError, err)
 		return
 	}
 
-	// to control json tags map dbuser to User struct
-	updatedUser := User{
+	respondWithJson(resWriter, http.StatusCreated, User{
 		ID:        dbUser.ID,
 		CreatedAt: dbUser.CreatedAt.Time,
 		UpdatedAt: dbUser.UpdatedAt.Time,
 		Email:     dbUser.Email.String,
-	}
-	respondWithJson(resWriter, http.StatusCreated, updatedUser)
+	})
 }
 
 func (a *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.Request) {
-	resWriter.Header().Add("Content-Type", "text/html; charset=utf-8")
 	listOfChirps := []Chirp{}
 
 	chirps, err := a.db.GetChirpsAscByCreated(req.Context())
@@ -111,8 +123,6 @@ func (a *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.Re
 }
 
 func (a *apiConfig) handlerGetSingleChirp(resWriter http.ResponseWriter, req *http.Request) {
-	resWriter.Header().Add("Content-Type", "text/html; charset=utf-8")
-
 	stringid := req.PathValue("chirpID")
 	convertedID, err := uuid.Parse(stringid)
 	if err != nil {
@@ -125,15 +135,13 @@ func (a *apiConfig) handlerGetSingleChirp(resWriter http.ResponseWriter, req *ht
 		return
 	}
 
-	finalChirp := Chirp{
+	respondWithJson(resWriter, http.StatusOK, Chirp{
 		ID:        dbChirp.ID,
 		CreatedAt: dbChirp.CreatedAt.Time,
 		UpdatedAt: dbChirp.UpdatedAt.Time,
 		Body:      dbChirp.Body.String,
 		UserID:    dbChirp.UserID.UUID,
-	}
-
-	respondWithJson(resWriter, http.StatusOK, finalChirp)
+	})
 }
 
 func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request) {
@@ -171,8 +179,6 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 		Body   string `json:"body"`
 		UserID string `json:"user_id"`
 	}
-
-	resWriter.Header().Add("Content-Type", "text/plain; charset=utf-8")
 
 	chirp := incoming{}
 	decoder := json.NewDecoder(req.Body)
@@ -214,4 +220,46 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 	} else { // is not valid
 		respondWithError(resWriter, "Chrip is too long", 400, nil)
 	}
+}
+
+func (cfg *apiConfig) handlerValidateUser(resWriter http.ResponseWriter, req *http.Request) {
+	type incoming struct {
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+
+	userinfo := incoming{}
+	decoder := json.NewDecoder(req.Body)
+	err := decoder.Decode(&userinfo)
+	if err != nil {
+		log.Printf("Error decoding json data in POST request: %v\n", err)
+		respondWithError(resWriter, "Something went wrong", http.StatusInternalServerError, err)
+		return
+	}
+	if userinfo.Email == "" || userinfo.Password == "" {
+		respondWithError(resWriter, "Provided an empty string for username or password", 400, nil)
+		return
+	}
+
+	dbUser, err := cfg.db.GetUserByEmail(req.Context(), sql.NullString{String: userinfo.Email, Valid: true})
+	if err != nil {
+		respondWithError(resWriter, "No user found", http.StatusUnauthorized, err)
+		return
+	}
+
+	match, err := auth.CheckPasswordHash(userinfo.Password, dbUser.HashedPassword.String)
+	if err != nil {
+		respondWithError(resWriter, "Issue checking password hash match", http.StatusInternalServerError, err)
+		return
+	}
+	if match {
+		respondWithJson(resWriter, http.StatusOK, User{
+			ID:        dbUser.ID,
+			CreatedAt: dbUser.CreatedAt.Time,
+			UpdatedAt: dbUser.UpdatedAt.Time,
+			Email:     dbUser.Email.String,
+		})
+		return
+	}
+	respondWithError(resWriter, "Invalid password", http.StatusUnauthorized, nil)
 }
