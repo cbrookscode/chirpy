@@ -25,7 +25,18 @@ func main() {
 	dbQueries := database.New(db)
 
 	myplatform := os.Getenv("PLATFORM")
-	cfg := &apiConfig{db: dbQueries, platform: myplatform}
+	theSauce := os.Getenv("SECRET_SAUCE")
+	cfg := &apiConfig{db: dbQueries, platform: myplatform, secret: theSauce}
+
+	// create log file to write all server logs to
+	logfile, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("issue opening log file: %v", err)
+	}
+	defer logfile.Close()
+
+	// direct log outputs to specified file
+	log.SetOutput(logfile)
 
 	srvmux := http.NewServeMux()
 	srvmux.Handle("/app/", cfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathroot)))))
@@ -42,16 +53,6 @@ func main() {
 		Handler: srvmux,
 		Addr:    ":" + port,
 	}
-
-	// create log file to write all server logs to
-	logfile, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("issue opening log file: %v", err)
-	}
-	defer logfile.Close()
-
-	// direct log outputs to specified file
-	log.SetOutput(logfile)
 
 	log.Printf("serving on port %v\n", port)
 	log.Fatal(srv.ListenAndServe())

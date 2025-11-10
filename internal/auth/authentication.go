@@ -2,7 +2,10 @@ package auth
 
 import (
 	"fmt"
+	"log"
+	"net/http"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -45,6 +48,7 @@ func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (str
 		ExpiresAt: later,
 		Subject:   userID.String(),
 	})
+	// log.Printf("Issued at: %v, Expires At: %v", now, later)
 	tokenString, err := token.SignedString([]byte(tokenSecret))
 	if err != nil {
 		return "", fmt.Errorf("couldn't sign string with provided secret: %v", err)
@@ -53,22 +57,37 @@ func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (str
 }
 
 func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
-	parsedToken, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(tokenSecret), nil
-	})
+	parsedToken, err := jwt.ParseWithClaims(
+		tokenString,
+		&jwt.RegisteredClaims{},
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(tokenSecret), nil
+		},
+	)
 	if err != nil {
+		log.Printf("issue parsing token string: %v", err)
 		return uuid.Nil, err
 	}
 	if parsedToken.Valid {
 		uuidString, err := parsedToken.Claims.GetSubject()
 		if err != nil {
+			log.Printf("issue getting subject from parse token: %v", err)
 			return uuid.Nil, err
 		}
 		validUUID, err := uuid.Parse(uuidString)
 		if err != nil {
+			log.Printf("issue parsing uuid string: %v", err)
 			return uuid.Nil, err
 		}
 		return validUUID, nil
 	}
 	return uuid.Nil, fmt.Errorf("invalid token")
+}
+
+func GetBearerToken(headers http.Header) (string, error) {
+	authHeader, exist := headers["Authorization"]
+	if !exist {
+		return "", fmt.Errorf("no auth info")
+	}
+	return strings.TrimPrefix(authHeader[0], "Bearer "), nil
 }

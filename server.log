@@ -57,3 +57,34 @@
 2025/11/07 09:46:31 sql: no rows in result set
 2025/11/07 11:35:35 serving on port 8080
 2025/11/07 13:45:17 serving on port 8080
+2025/11/10 11:13:41 serving on port 8080
+2025/11/10 11:20:50 serving on port 8080
+2025/11/10 11:20:52 issue parsing token string: token is malformed: could not base64 decode header: illegal base64 data at input byte 0
+2025/11/10 11:32:40 serving on port 8080
+2025/11/10 11:32:42 issue parsing token string: token has invalid claims: token is expired
+2025/11/10 11:34:48 serving on port 8080
+2025/11/10 11:35:06 issue parsing token string: token has invalid claims: token is expired
+2025/11/10 11:35:40 sql: no rows in result set
+2025/11/10 11:35:54 issue parsing token string: token has invalid claims: token is expired
+2025/11/10 11:37:42 serving on port 8080
+2025/11/10 11:37:48 sql: no rows in result set
+2025/11/10 11:37:56 issue parsing token string: token has invalid claims: token is expired
+2025/11/10 11:38:58 serving on port 8080
+2025/11/10 11:39:03 sql: no rows in result set
+2025/11/10 11:39:11 issue parsing token string: token has invalid claims: token is expired
+2025/11/10 11:53:36 serving on port 8080
+2025/11/10 11:53:40 sql: no rows in result set
+2025/11/10 11:53:48 issue parsing token string: token has invalid claims: token is expired
+2025/11/10 11:56:36 serving on port 8080
+2025/11/10 11:56:41 sql: no rows in result set
+2025/11/10 11:57:46 serving on port 8080
+2025/11/10 11:57:51 sql: no rows in result set
+2025/11/10 12:00:23 serving on port 8080
+2025/11/10 12:00:27 sql: no rows in result set
+2025/11/10 12:00:37 sql: no rows in result set
+2025/11/10 12:02:53 Issued at: 2025-11-10 17:02:53.883586424 +0000 UTC, Expires At: 2025-11-10 18:02:53.883587863 +0000 UTC
+2025/11/10 12:05:35 serving on port 8080
+2025/11/10 12:06:05 Issued at: 2025-11-10 17:06:05.469340723 +0000 UTC, Expires At: 2025-11-10 18:06:05.469341987 +0000 UTC
+2025/11/10 12:06:05 Issued at: 2025-11-10 17:06:05.543838407 +0000 UTC, Expires At: 2025-11-10 18:06:05.543839309 +0000 UTC
+2025/11/10 12:06:21 Issued at: 2025-11-10 17:06:21.851326076 +0000 UTC, Expires At: 2025-11-10 18:06:21.851327337 +0000 UTC
+2025/11/10 12:06:21 Issued at: 2025-11-10 17:06:21.911284624 +0000 UTC, Expires At: 2025-11-10 18:06:21.911285509 +0000 UTC

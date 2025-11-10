@@ -18,6 +18,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
 	platform       string
+	secret         string
 }
 
 type Chirp struct {
@@ -33,6 +34,7 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	Token     string    `json:"token"`
 }
 
 func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -180,9 +182,20 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 		UserID string `json:"user_id"`
 	}
 
+	tokenString, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, "Token not provied", http.StatusUnauthorized, nil)
+		return
+	}
+	userUUID, err := auth.ValidateJWT(tokenString, cfg.secret)
+	if err != nil {
+		respondWithError(resWriter, "Token invalid", http.StatusUnauthorized, nil)
+		return
+	}
+
 	chirp := incoming{}
 	decoder := json.NewDecoder(req.Body)
-	err := decoder.Decode(&chirp)
+	err = decoder.Decode(&chirp)
 	if err != nil {
 		log.Printf("Error decoding json data in POST request: %v\n", err)
 		respondWithError(resWriter, "Something went wrong", 500, err)
@@ -192,17 +205,11 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 	// Filter profanity and make sure chirp is less than or equal to 140 characters
 	filteredChirp := filterProfanity(chirp.Body)
 	if len(filteredChirp) <= 140 { // valid
-		convertedID, err := uuid.Parse(chirp.UserID)
-		if err != nil {
-			respondWithError(resWriter, "user id provided is not a valid UUID", http.StatusBadRequest, nil)
-			return
-		}
-
 		dbChirp, err := cfg.db.CreateChirp(req.Context(), database.CreateChirpParams{ // store chirp in db
 			Body: sql.NullString{
 				String: filteredChirp,
 				Valid:  true},
-			UserID: uuid.NullUUID{UUID: convertedID, Valid: true},
+			UserID: uuid.NullUUID{UUID: userUUID, Valid: true},
 		})
 		if err != nil {
 			respondWithError(resWriter, "Error storing chrip in database", http.StatusInternalServerError, err)
@@ -224,8 +231,9 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 
 func (cfg *apiConfig) handlerValidateUser(resWriter http.ResponseWriter, req *http.Request) {
 	type incoming struct {
-		Password string `json:"password"`
-		Email    string `json:"email"`
+		Password         string `json:"password"`
+		Email            string `json:"email"`
+		ExpiresInSeconds int    `json:"expires_in_seconds"`
 	}
 
 	userinfo := incoming{}
@@ -252,14 +260,25 @@ func (cfg *apiConfig) handlerValidateUser(resWriter http.ResponseWriter, req *ht
 		respondWithError(resWriter, "Issue checking password hash match", http.StatusInternalServerError, err)
 		return
 	}
-	if match {
-		respondWithJson(resWriter, http.StatusOK, User{
-			ID:        dbUser.ID,
-			CreatedAt: dbUser.CreatedAt.Time,
-			UpdatedAt: dbUser.UpdatedAt.Time,
-			Email:     dbUser.Email.String,
-		})
+	if !match {
+		respondWithError(resWriter, "Invalid password", http.StatusUnauthorized, nil)
 		return
 	}
-	respondWithError(resWriter, "Invalid password", http.StatusUnauthorized, nil)
+
+	expireTime := 3600
+	if userinfo.ExpiresInSeconds != 0 && userinfo.ExpiresInSeconds <= 3600 {
+		expireTime = userinfo.ExpiresInSeconds
+	}
+	tokenString, err := auth.MakeJWT(dbUser.ID, cfg.secret, time.Duration(expireTime)*time.Second)
+	if err != nil {
+		respondWithError(resWriter, "Issue generating token", http.StatusInternalServerError, err)
+		return
+	}
+	respondWithJson(resWriter, http.StatusOK, User{
+		ID:        dbUser.ID,
+		CreatedAt: dbUser.CreatedAt.Time,
+		UpdatedAt: dbUser.UpdatedAt.Time,
+		Email:     dbUser.Email.String,
+		Token:     tokenString,
+	})
 }
