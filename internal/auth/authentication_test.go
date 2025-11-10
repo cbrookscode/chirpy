@@ -3,7 +3,6 @@ package auth
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -12,22 +11,21 @@ func TestCreateAndValidateJWT(t *testing.T) {
 	type testToken struct {
 		id          uuid.UUID
 		tokenSecret string
-		duration    time.Duration
 	}
 
 	tests := []testToken{
-		{uuid.New(), "dinosaurs", time.Minute},
-		{uuid.New(), "computers", time.Minute},
-		{uuid.New(), "wiley", time.Minute},
-		{uuid.New(), "booger", time.Minute},
-		{uuid.New(), "puke", time.Minute},
+		{uuid.New(), "dinosaurs"},
+		{uuid.New(), "computers"},
+		{uuid.New(), "wiley"},
+		{uuid.New(), "booger"},
+		{uuid.New(), "puke"},
 	}
 
 	for _, tt := range tests {
 		tt := tt // capture variable at current loop iteration
 		t.Run(tt.tokenSecret, func(t *testing.T) {
 			t.Parallel() // run each subtest concurrently
-			tokenString, err := MakeJWT(tt.id, tt.tokenSecret, tt.duration)
+			tokenString, err := MakeJWT(tt.id, tt.tokenSecret)
 			if err != nil {
 				t.Errorf("error making jwt: %v", err)
 			}

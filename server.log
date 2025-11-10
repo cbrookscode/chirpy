@@ -88,3 +88,17 @@
 2025/11/10 12:06:05 Issued at: 2025-11-10 17:06:05.543838407 +0000 UTC, Expires At: 2025-11-10 18:06:05.543839309 +0000 UTC
 2025/11/10 12:06:21 Issued at: 2025-11-10 17:06:21.851326076 +0000 UTC, Expires At: 2025-11-10 18:06:21.851327337 +0000 UTC
 2025/11/10 12:06:21 Issued at: 2025-11-10 17:06:21.911284624 +0000 UTC, Expires At: 2025-11-10 18:06:21.911285509 +0000 UTC
+2025/11/10 14:21:26 serving on port 8080
+2025/11/10 14:21:34 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/10 14:24:22 serving on port 8080
+2025/11/10 14:24:27 pq: update or delete on table "users" violates foreign key constraint "refresh_tokens_user_id_fkey" on table "refresh_tokens"
+2025/11/10 14:24:27 Responding with 5XX error: Failed to delete user records
+2025/11/10 14:24:27 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/10 14:25:58 serving on port 8080
+2025/11/10 14:26:02 issue deleting user records: pq: update or delete on table "users" violates foreign key constraint "refresh_tokens_user_id_fkey" on table "refresh_tokens"
+2025/11/10 14:26:02 pq: update or delete on table "users" violates foreign key constraint "refresh_tokens_user_id_fkey" on table "refresh_tokens"
+2025/11/10 14:26:02 Responding with 5XX error: Failed to delete user records
+2025/11/10 14:26:02 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/10 14:28:55 serving on port 8080
+2025/11/10 14:29:07 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/10 14:29:27 issue parsing token string: token is malformed: token contains an invalid number of segments

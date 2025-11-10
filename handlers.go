@@ -30,11 +30,12 @@ type Chirp struct {
 }
 
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
-	Token     string    `json:"token"`
+	ID           uuid.UUID `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Email        string    `json:"email"`
+	Token        string    `json:"token"`
+	RefreshToken string    `json:"refresh_token"`
 }
 
 func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -147,13 +148,19 @@ func (a *apiConfig) handlerGetSingleChirp(resWriter http.ResponseWriter, req *ht
 }
 
 func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request) {
-	reswrit.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	if a.platform != "dev" {
 		respondWithError(reswrit, "Reset is only allowed in dev environment", http.StatusForbidden, nil)
 		return
 	}
-	err := a.db.DeleteUsers(req.Context())
+	err := a.db.DeleteRefreshTokens(req.Context())
 	if err != nil {
+		log.Printf("issue deleting refresh token records: %v", err)
+		respondWithError(reswrit, "Failed to refresh token records", 500, err)
+		return
+	}
+	err = a.db.DeleteUsers(req.Context())
+	if err != nil {
+		log.Printf("issue deleting user records: %v", err)
 		respondWithError(reswrit, "Failed to delete user records", 500, err)
 		return
 	}
@@ -165,6 +172,8 @@ func (a *apiConfig) handlerReset(reswrit http.ResponseWriter, req *http.Request)
 	}
 
 	a.fileserverHits.Store(0)
+
+	reswrit.Header().Add("Content-Type", "text/plain; charset=utf-8")
 	new := fmt.Sprintf("Users and chirps have been deleted, and counter has been reset: %v\n", a.fileserverHits.Load())
 	reswrit.WriteHeader(http.StatusOK)
 	reswrit.Write([]byte(new))
@@ -231,9 +240,8 @@ func (cfg *apiConfig) handlerChirps(resWriter http.ResponseWriter, req *http.Req
 
 func (cfg *apiConfig) handlerValidateUser(resWriter http.ResponseWriter, req *http.Request) {
 	type incoming struct {
-		Password         string `json:"password"`
-		Email            string `json:"email"`
-		ExpiresInSeconds int    `json:"expires_in_seconds"`
+		Password string `json:"password"`
+		Email    string `json:"email"`
 	}
 
 	userinfo := incoming{}
@@ -265,20 +273,81 @@ func (cfg *apiConfig) handlerValidateUser(resWriter http.ResponseWriter, req *ht
 		return
 	}
 
-	expireTime := 3600
-	if userinfo.ExpiresInSeconds != 0 && userinfo.ExpiresInSeconds <= 3600 {
-		expireTime = userinfo.ExpiresInSeconds
-	}
-	tokenString, err := auth.MakeJWT(dbUser.ID, cfg.secret, time.Duration(expireTime)*time.Second)
+	tokenString, err := auth.MakeJWT(dbUser.ID, cfg.secret)
 	if err != nil {
 		respondWithError(resWriter, "Issue generating token", http.StatusInternalServerError, err)
 		return
 	}
-	respondWithJson(resWriter, http.StatusOK, User{
-		ID:        dbUser.ID,
-		CreatedAt: dbUser.CreatedAt.Time,
-		UpdatedAt: dbUser.UpdatedAt.Time,
-		Email:     dbUser.Email.String,
-		Token:     tokenString,
+	refreshString, err := auth.MakeRefreshToken()
+	if err != nil {
+		respondWithError(resWriter, "Issue generating refresh token", http.StatusInternalServerError, err)
+		return
+	}
+	later := time.Now().UTC().Add(time.Hour * 1440)
+	_, err = cfg.db.StoreRefreshToken(req.Context(), database.StoreRefreshTokenParams{
+		Token:     refreshString,
+		UserID:    dbUser.ID,
+		ExpiresAt: sql.NullTime{Time: later, Valid: true},
 	})
+	if err != nil {
+		respondWithError(resWriter, "Issue storing refresh token in database", http.StatusInternalServerError, err)
+		return
+	}
+	respondWithJson(resWriter, http.StatusOK, User{
+		ID:           dbUser.ID,
+		CreatedAt:    dbUser.CreatedAt.Time,
+		UpdatedAt:    dbUser.UpdatedAt.Time,
+		Email:        dbUser.Email.String,
+		Token:        tokenString,
+		RefreshToken: refreshString,
+	})
+}
+
+func (cfg *apiConfig) handlerRefreshToken(resWriter http.ResponseWriter, req *http.Request) {
+	refTokenString, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, "Refresh token not provied", http.StatusUnauthorized, nil)
+		return
+	}
+
+	dbRefToken, err := cfg.db.GrabRefreshToken(req.Context(), refTokenString)
+	if err != nil {
+		respondWithError(resWriter, "Refresh token not valid", http.StatusUnauthorized, nil)
+		return
+	}
+	if dbRefToken.ExpiresAt.Time.Before(time.Now().UTC()) {
+		respondWithError(resWriter, "Refresh token expired", http.StatusUnauthorized, nil)
+		return
+	}
+	if dbRefToken.RevokedAt.Valid {
+		respondWithError(resWriter, "Refresh token revoked", http.StatusUnauthorized, nil)
+		return
+	}
+
+	tokenstring, err := auth.MakeJWT(dbRefToken.UserID, cfg.secret)
+	if err != nil {
+		respondWithError(resWriter, "Failed to get new token", http.StatusInternalServerError, err)
+		return
+	}
+
+	respondWithJson(resWriter, http.StatusOK, struct {
+		Token string `json:"token"`
+	}{
+		Token: tokenstring,
+	})
+}
+
+func (cfg *apiConfig) handlerRevokeRefToken(resWriter http.ResponseWriter, req *http.Request) {
+	refTokenString, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, "Refresh token not provided", http.StatusUnauthorized, nil)
+		return
+	}
+
+	err = cfg.db.RevokeRefreshToken(req.Context(), refTokenString)
+	if err != nil {
+		respondWithError(resWriter, "issue revoking provided token", http.StatusInternalServerError, err)
+		return
+	}
+	respondWithJson(resWriter, http.StatusNoContent, struct{}{})
 }

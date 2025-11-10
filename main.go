@@ -48,6 +48,8 @@ func main() {
 	srvmux.HandleFunc("GET /api/chirps", cfg.handlerGetChirps)
 	srvmux.HandleFunc("GET /api/chirps/{chirpID}", cfg.handlerGetSingleChirp)
 	srvmux.HandleFunc("POST /api/login", cfg.handlerValidateUser)
+	srvmux.HandleFunc("POST /api/refresh", cfg.handlerRefreshToken)
+	srvmux.HandleFunc("POST /api/revoke", cfg.handlerRevokeRefToken)
 
 	srv := http.Server{
 		Handler: srvmux,
