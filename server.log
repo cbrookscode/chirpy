@@ -111,3 +111,24 @@
 2025/11/11 10:06:00 serving on port 8080
 2025/11/11 10:06:07 sql: no rows in result set
 2025/11/11 10:06:23 sql: no rows in result set
+2025/11/11 10:41:32 serving on port 8080
+2025/11/11 11:12:10 serving on port 8080
+2025/11/11 11:12:28  is the event
+2025/11/11 11:12:28  is the event
+2025/11/11 11:13:52 serving on port 8080
+2025/11/11 11:13:56 user.payment_failed is the event
+2025/11/11 11:15:34 serving on port 8080
+2025/11/11 11:15:38 Not a user.upgraded event. user.payment_failed is the event
+2025/11/11 11:18:46 serving on port 8080
+2025/11/11 11:18:50 Not a user.upgraded event. user.payment_failed is the event
+2025/11/11 11:18:50  is provided string that could not be parsed into UUID
+2025/11/11 11:20:42 serving on port 8080
+2025/11/11 11:20:46 Not a user.upgraded event. user.payment_failed is the event
+2025/11/11 11:20:46 user.upgraded is the event. and updating db was successful
+2025/11/11 11:20:56 Not a user.upgraded event. user.payment_failed is the event
+2025/11/11 11:20:56 user.upgraded is the event. and updating db was successful
+2025/11/11 11:31:08 serving on port 8080
+2025/11/11 11:31:15 no key provided or issue with getting key: no auth info
+2025/11/11 11:31:15 user.upgraded is the event. and updating db was successful
+2025/11/11 11:31:20 no key provided or issue with getting key: no auth info
+2025/11/11 11:31:20 user.upgraded is the event. and updating db was successful

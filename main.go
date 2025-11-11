@@ -26,7 +26,8 @@ func main() {
 
 	myplatform := os.Getenv("PLATFORM")
 	theSauce := os.Getenv("SECRET_SAUCE")
-	cfg := &apiConfig{db: dbQueries, platform: myplatform, secret: theSauce}
+	polka := os.Getenv("POLKA_KEY")
+	cfg := &apiConfig{db: dbQueries, platform: myplatform, secret: theSauce, polkaKey: polka}
 
 	// create log file to write all server logs to
 	logfile, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -52,6 +53,7 @@ func main() {
 	srvmux.HandleFunc("POST /api/revoke", cfg.handlerRevokeRefToken)
 	srvmux.HandleFunc("PUT /api/users", cfg.handlerUpdateUser)
 	srvmux.HandleFunc("DELETE /api/chirps/{chirpID}", cfg.handlerDeleteChirp)
+	srvmux.HandleFunc("/api/polka/webhooks", cfg.handlerChirpyRed)
 
 	srv := http.Server{
 		Handler: srvmux,

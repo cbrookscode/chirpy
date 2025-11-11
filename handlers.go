@@ -19,6 +19,7 @@ type apiConfig struct {
 	db             *database.Queries
 	platform       string
 	secret         string
+	polkaKey       string
 }
 
 type Chirp struct {
@@ -36,6 +37,7 @@ type User struct {
 	Email        string    `json:"email"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
+	IsChirpyRed  bool      `json:"is_chirpy_red"`
 }
 
 func (a *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -96,10 +98,11 @@ func (a *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http.R
 	}
 
 	respondWithJson(resWriter, http.StatusCreated, User{
-		ID:        dbUser.ID,
-		CreatedAt: dbUser.CreatedAt.Time,
-		UpdatedAt: dbUser.UpdatedAt.Time,
-		Email:     dbUser.Email.String,
+		ID:          dbUser.ID,
+		CreatedAt:   dbUser.CreatedAt.Time,
+		UpdatedAt:   dbUser.UpdatedAt.Time,
+		Email:       dbUser.Email.String,
+		IsChirpyRed: dbUser.IsChirpyRed.Bool,
 	})
 }
 
@@ -298,6 +301,7 @@ func (cfg *apiConfig) handlerValidateUser(resWriter http.ResponseWriter, req *ht
 		CreatedAt:    dbUser.CreatedAt.Time,
 		UpdatedAt:    dbUser.UpdatedAt.Time,
 		Email:        dbUser.Email.String,
+		IsChirpyRed:  dbUser.IsChirpyRed.Bool,
 		Token:        tokenString,
 		RefreshToken: refreshString,
 	})
@@ -389,7 +393,7 @@ func (cfg *apiConfig) handlerUpdateUser(resWriter http.ResponseWriter, req *http
 		return
 	}
 
-	updatedUser, err := cfg.db.UpdateUser(req.Context(), database.UpdateUserParams{
+	updatedUser, err := cfg.db.UpdateUserEmailAndPW(req.Context(), database.UpdateUserEmailAndPWParams{
 		HashedPassword: sql.NullString{String: hashPW, Valid: true},
 		Email:          sql.NullString{String: userinfo.Email, Valid: true},
 		ID:             userUUID,
@@ -399,10 +403,11 @@ func (cfg *apiConfig) handlerUpdateUser(resWriter http.ResponseWriter, req *http
 		return
 	}
 	respondWithJson(resWriter, http.StatusOK, User{
-		ID:        updatedUser.ID,
-		CreatedAt: updatedUser.CreatedAt.Time,
-		UpdatedAt: updatedUser.UpdatedAt.Time,
-		Email:     updatedUser.Email.String,
+		ID:          updatedUser.ID,
+		CreatedAt:   updatedUser.CreatedAt.Time,
+		UpdatedAt:   updatedUser.UpdatedAt.Time,
+		Email:       updatedUser.Email.String,
+		IsChirpyRed: updatedUser.IsChirpyRed.Bool,
 	})
 }
 
@@ -443,5 +448,54 @@ func (cfg *apiConfig) handlerDeleteChirp(resWriter http.ResponseWriter, req *htt
 		return
 	}
 	respondWithJson(resWriter, http.StatusNoContent, struct{}{})
+}
 
+func (cfg *apiConfig) handlerChirpyRed(resWriter http.ResponseWriter, req *http.Request) {
+	apikey, err := auth.GetAPIKey(req.Header)
+	if err != nil {
+		log.Printf("no key provided or issue with getting key: %v", err)
+		respondWithError(resWriter, "No key provided", http.StatusUnauthorized, nil)
+		return
+	}
+	if apikey != cfg.polkaKey {
+		respondWithError(resWriter, "Invalid key provided", http.StatusUnauthorized, nil)
+		return
+	}
+	type incoming struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID string `json:"user_id"`
+		} `json:"data"`
+	}
+
+	webhookInfo := incoming{}
+	decoder := json.NewDecoder(req.Body)
+	err = decoder.Decode(&webhookInfo)
+	if err != nil {
+		log.Printf("Error decoding json data in request: %v\n", err)
+		respondWithError(resWriter, "Something went wrong", http.StatusInternalServerError, err)
+		return
+	}
+
+	if webhookInfo.Event != "user.upgraded" {
+		log.Printf("Not a user.upgraded event. %v is the event", webhookInfo.Event)
+		respondWithJson(resWriter, http.StatusNoContent, struct{}{})
+		return
+	}
+
+	convertedID, err := uuid.Parse(webhookInfo.Data.UserID)
+	if err != nil {
+		log.Printf("%v is provided string that could not be parsed into UUID", webhookInfo.Data.UserID)
+		respondWithError(resWriter, "chirp id provided is not a valid UUID", http.StatusBadRequest, nil)
+		return
+	}
+
+	err = cfg.db.UpdateUserChirpyRedStatus(req.Context(), database.UpdateUserChirpyRedStatusParams{ID: convertedID, IsChirpyRed: sql.NullBool{Bool: true, Valid: true}})
+	if err != nil {
+		log.Printf("Failed to update db with red status. %v is the event", webhookInfo.Event)
+		respondWithError(resWriter, "issue updating chirpy red status", http.StatusNotFound, err)
+		return
+	}
+	log.Printf("%v is the event. and updating db was successful", webhookInfo.Event)
+	respondWithJson(resWriter, http.StatusNoContent, struct{}{})
 }
