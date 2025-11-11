@@ -129,7 +129,7 @@ func (a *apiConfig) handlerGetSingleChirp(resWriter http.ResponseWriter, req *ht
 	stringid := req.PathValue("chirpID")
 	convertedID, err := uuid.Parse(stringid)
 	if err != nil {
-		respondWithError(resWriter, "user id provided is not a valid UUID", http.StatusBadRequest, nil)
+		respondWithError(resWriter, "chirp id provided is not a valid UUID", http.StatusBadRequest, nil)
 		return
 	}
 	dbChirp, err := a.db.GetSingleChirp(req.Context(), convertedID)
@@ -350,4 +350,98 @@ func (cfg *apiConfig) handlerRevokeRefToken(resWriter http.ResponseWriter, req *
 		return
 	}
 	respondWithJson(resWriter, http.StatusNoContent, struct{}{})
+}
+
+func (cfg *apiConfig) handlerUpdateUser(resWriter http.ResponseWriter, req *http.Request) {
+	TokenString, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, "token not provided", http.StatusUnauthorized, nil)
+		return
+	}
+
+	userUUID, err := auth.ValidateJWT(TokenString, cfg.secret)
+	if err != nil {
+		respondWithError(resWriter, "Invalid token", http.StatusUnauthorized, nil)
+		return
+	}
+
+	type incoming struct {
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+
+	userinfo := incoming{}
+	decoder := json.NewDecoder(req.Body)
+	err = decoder.Decode(&userinfo)
+	if err != nil {
+		log.Printf("Error decoding json data in request: %v\n", err)
+		respondWithError(resWriter, "Something went wrong", http.StatusInternalServerError, err)
+		return
+	}
+	if userinfo.Email == "" || userinfo.Password == "" {
+		respondWithError(resWriter, "Provided an empty string for username or password", 400, nil)
+		return
+	}
+
+	hashPW, err := auth.HashPassword(userinfo.Password)
+	if err != nil {
+		respondWithError(resWriter, "issue hashing password", http.StatusInternalServerError, err)
+		return
+	}
+
+	updatedUser, err := cfg.db.UpdateUser(req.Context(), database.UpdateUserParams{
+		HashedPassword: sql.NullString{String: hashPW, Valid: true},
+		Email:          sql.NullString{String: userinfo.Email, Valid: true},
+		ID:             userUUID,
+	})
+	if err != nil {
+		respondWithError(resWriter, "issue updating user info in database", http.StatusInternalServerError, err)
+		return
+	}
+	respondWithJson(resWriter, http.StatusOK, User{
+		ID:        updatedUser.ID,
+		CreatedAt: updatedUser.CreatedAt.Time,
+		UpdatedAt: updatedUser.UpdatedAt.Time,
+		Email:     updatedUser.Email.String,
+	})
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(resWriter http.ResponseWriter, req *http.Request) {
+	TokenString, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, "token not provided", http.StatusUnauthorized, nil)
+		return
+	}
+
+	userUUID, err := auth.ValidateJWT(TokenString, cfg.secret)
+	if err != nil {
+		respondWithError(resWriter, "Invalid token", http.StatusUnauthorized, nil)
+		return
+	}
+
+	stringid := req.PathValue("chirpID")
+	convertedID, err := uuid.Parse(stringid)
+	if err != nil {
+		respondWithError(resWriter, "chirp id provided is not a valid UUID", http.StatusBadRequest, nil)
+		return
+	}
+
+	dbChirp, err := cfg.db.GetSingleChirp(req.Context(), convertedID)
+	if err != nil {
+		respondWithError(resWriter, "Chirp not found", http.StatusNotFound, err)
+		return
+	}
+
+	if userUUID != dbChirp.UserID.UUID {
+		respondWithError(resWriter, "You are not the author of this chirp", http.StatusForbidden, nil)
+		return
+	}
+
+	err = cfg.db.DeleteSingleChirp(req.Context(), convertedID)
+	if err != nil {
+		respondWithError(resWriter, "issue deleting provided chirp", http.StatusInternalServerError, err)
+		return
+	}
+	respondWithJson(resWriter, http.StatusNoContent, struct{}{})
+
 }

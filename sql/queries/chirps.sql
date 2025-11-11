@@ -18,3 +18,7 @@ ORDER BY created_at ASC;
 
 -- name: DeleteChirps :exec
 DELETE FROM chirps;
+
+-- name: DeleteSingleChirp :exec
+DELETE FROM chirps
+WHERE id = $1;

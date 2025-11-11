@@ -102,3 +102,12 @@
 2025/11/10 14:28:55 serving on port 8080
 2025/11/10 14:29:07 issue parsing token string: token is malformed: token contains an invalid number of segments
 2025/11/10 14:29:27 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/11 09:27:50 serving on port 8080
+2025/11/11 09:27:53 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/11 09:46:37 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/11 09:48:34 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/11 09:51:20 serving on port 8080
+2025/11/11 09:51:26 issue parsing token string: token is malformed: token contains an invalid number of segments
+2025/11/11 10:06:00 serving on port 8080
+2025/11/11 10:06:07 sql: no rows in result set
+2025/11/11 10:06:23 sql: no rows in result set

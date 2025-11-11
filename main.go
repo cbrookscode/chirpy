@@ -50,6 +50,8 @@ func main() {
 	srvmux.HandleFunc("POST /api/login", cfg.handlerValidateUser)
 	srvmux.HandleFunc("POST /api/refresh", cfg.handlerRefreshToken)
 	srvmux.HandleFunc("POST /api/revoke", cfg.handlerRevokeRefToken)
+	srvmux.HandleFunc("PUT /api/users", cfg.handlerUpdateUser)
+	srvmux.HandleFunc("DELETE /api/chirps/{chirpID}", cfg.handlerDeleteChirp)
 
 	srv := http.Server{
 		Handler: srvmux,
