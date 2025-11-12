@@ -115,14 +115,29 @@ func (a *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.Re
 		return
 	}
 
-	for _, chirp := range chirps {
-		listOfChirps = append(listOfChirps, Chirp{
-			ID:        chirp.ID,
-			CreatedAt: chirp.CreatedAt.Time,
-			UpdatedAt: chirp.UpdatedAt.Time,
-			Body:      chirp.Body.String,
-			UserID:    chirp.UserID.UUID,
-		})
+	auth_id := req.URL.Query().Get("author_id")
+	if auth_id != "" {
+		for _, chirp := range chirps {
+			if chirp.UserID.UUID.String() == auth_id {
+				listOfChirps = append(listOfChirps, Chirp{
+					ID:        chirp.ID,
+					CreatedAt: chirp.CreatedAt.Time,
+					UpdatedAt: chirp.UpdatedAt.Time,
+					Body:      chirp.Body.String,
+					UserID:    chirp.UserID.UUID,
+				})
+			}
+		}
+	} else {
+		for _, chirp := range chirps {
+			listOfChirps = append(listOfChirps, Chirp{
+				ID:        chirp.ID,
+				CreatedAt: chirp.CreatedAt.Time,
+				UpdatedAt: chirp.UpdatedAt.Time,
+				Body:      chirp.Body.String,
+				UserID:    chirp.UserID.UUID,
+			})
+		}
 	}
 
 	respondWithJson(resWriter, http.StatusOK, listOfChirps)

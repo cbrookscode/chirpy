@@ -132,3 +132,11 @@
 2025/11/11 11:31:15 user.upgraded is the event. and updating db was successful
 2025/11/11 11:31:20 no key provided or issue with getting key: no auth info
 2025/11/11 11:31:20 user.upgraded is the event. and updating db was successful
+2025/11/12 11:24:10 serving on port 8080
+2025/11/12 11:24:16 Error decoding json data in request: EOF
+2025/11/12 11:24:16 EOF
+2025/11/12 11:24:16 Responding with 5XX error: Something went wrong
+2025/11/12 11:24:16 Error decoding json data in request: EOF
+2025/11/12 11:24:16 EOF
+2025/11/12 11:24:16 Responding with 5XX error: Something went wrong
+2025/11/12 11:28:19 serving on port 8080
