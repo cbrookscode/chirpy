@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -107,37 +108,31 @@ func (a *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http.R
 }
 
 func (a *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.Request) {
-	listOfChirps := []Chirp{}
-
 	chirps, err := a.db.GetChirpsAscByCreated(req.Context())
 	if err != nil {
 		respondWithError(resWriter, "Couldn't grab users in ascending order from database", http.StatusInternalServerError, err)
 		return
 	}
 
+	listOfChirps := []Chirp{}
 	auth_id := req.URL.Query().Get("author_id")
-	if auth_id != "" {
-		for _, chirp := range chirps {
-			if chirp.UserID.UUID.String() == auth_id {
-				listOfChirps = append(listOfChirps, Chirp{
-					ID:        chirp.ID,
-					CreatedAt: chirp.CreatedAt.Time,
-					UpdatedAt: chirp.UpdatedAt.Time,
-					Body:      chirp.Body.String,
-					UserID:    chirp.UserID.UUID,
-				})
-			}
+	for _, chirp := range chirps {
+		if auth_id != "" && chirp.UserID.UUID.String() != auth_id {
+			continue // only include matches if an author id exists
 		}
-	} else {
-		for _, chirp := range chirps {
-			listOfChirps = append(listOfChirps, Chirp{
-				ID:        chirp.ID,
-				CreatedAt: chirp.CreatedAt.Time,
-				UpdatedAt: chirp.UpdatedAt.Time,
-				Body:      chirp.Body.String,
-				UserID:    chirp.UserID.UUID,
-			})
-		}
+		listOfChirps = append(listOfChirps, Chirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt.Time,
+			UpdatedAt: chirp.UpdatedAt.Time,
+			Body:      chirp.Body.String,
+			UserID:    chirp.UserID.UUID,
+		})
+	}
+	sortType := req.URL.Query().Get("sort")
+	if sortType == "desc" {
+		sort.Slice(listOfChirps, func(i, j int) bool {
+			return listOfChirps[i].CreatedAt.After(listOfChirps[j].CreatedAt)
+		})
 	}
 
 	respondWithJson(resWriter, http.StatusOK, listOfChirps)
